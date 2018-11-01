@@ -1,0 +1,3 @@
+/home/ywh/work3/ControlFrame/ControlFrame/build/test/CMakeFiles/test1.dir
+/home/ywh/work3/ControlFrame/ControlFrame/build/src/CMakeFiles/test_src.dir
+/home/ywh/work3/ControlFrame/ControlFrame/build/main/CMakeFiles/main.dir

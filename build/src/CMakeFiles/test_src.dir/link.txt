@@ -1,0 +1,2 @@
+/usr/bin/ar cq libtest_src.a  CMakeFiles/test_src.dir/api/apiCommands.cpp.o CMakeFiles/test_src.dir/api/api.cpp.o CMakeFiles/test_src.dir/robotStateMechine/robotStateMechine.cpp.o CMakeFiles/test_src.dir/robotStateMechine/robotStates.cpp.o CMakeFiles/test_src.dir/hello/hello.cpp.o CMakeFiles/test_src.dir/hello/helloCommands.cpp.o
+/usr/bin/ranlib libtest_src.a
