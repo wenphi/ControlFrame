@@ -23,7 +23,7 @@ int main()
     std::vector<std::thread> threads;
     signal(SIGINT, stop);
     api *apitest = new api(taddress, "test");
-    for (int i = 0; i <= 100; i++)
+    for (int i = 0; i <= 10000; i++)
     {
         apitest->setHello(i);
         std::cout << "send:" << i << std::endl;

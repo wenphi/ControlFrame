@@ -29,10 +29,9 @@ int main()
     //注册
     rsm->registerMessageServer(msgServer);
     rsm->registerHello(ptrHello);
-    threads.emplace_back(&robotStateMechine::updateHook, rsm);
     rsm->setStart();
     while (!stopFlag)
-        sleep(1);
+        rsm->updateHook();
 
     rsm->setStop();
     for (auto &thr : threads)

@@ -44,7 +44,7 @@ moduleBase *robotStateMechine::praseCmdToModule()
 
 void robotStateMechine::updateHook()
 {
-    while (!stopFlag)
+    if (!stopFlag)
     {
         if (recvMessage())
         {
