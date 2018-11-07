@@ -1,95 +1,133 @@
-//
-// 自定义ROUTER-REQ路由
-//
 #include "libzmq/include/zhelpers.h"
-#include <pthread.h>
+#include "api/api.hpp"
+#include "libjsoncpp/include/json.h"
+#include <csignal>
 #include <iostream>
+#include <thread>
+#include <cstdlib>
+#include <cstring>
+#include <unistd.h>
 
-#define NBR_WORKERS 10
+#define CLIENT_NUM 10
+bool stopFlag = false;
+std::string taddress = "ipc://pub_sub.ipc";
 
-std::string address = "ipc://routing.ipc";
-static void *worker_task(void *args)
+enum FILTER_ENUM
 {
-    void *context = zmq_init(1);
-    void *worker = zmq_socket(context, ZMQ_SUB);
+    WEB = 0001,
+    SOCK = 0002,
+};
 
-    // s_set_id()函数会根据套接字生成一个可打印的字符串，
-    // 并以此作为该套接字的标识。
-    std::string name = "worker0";
-    zmq_setsockopt(worker, ZMQ_SUBSCRIBE, name.c_str(), name.size());
-    zmq_connect(worker, address.c_str());
-
-    int total = 0;
-    while (1)
-    {
-        // 告诉ROUTER我已经准备好了
-        s_send(worker, (char *)"ready");
-        // 从ROUTER中获取工作，直到收到结束的信息
-        char *workload = s_recv(worker);
-        int finished = (strcmp(workload, "END") == 0);
-        free(workload);
-        if (finished)
-        {
-            printf("Processed: %d tasks\n", total);
-            break;
-        }
-        total++;
-        //等待一段时间
-        sleep(1);
-    }
-    zmq_close(worker);
-    zmq_term(context);
-    return NULL;
+void stop(int sig)
+{
+    if (sig)
+        stopFlag = true;
 }
 
-int main(void)
+void testSub(int num)
 {
-    void *context = zmq_init(1);
-    void *client = zmq_socket(context, ZMQ_ROUTER);
-    zmq_bind(client, "ipc://routing.ipc");
-
-    int worker_nbr;
-    for (worker_nbr = 0; worker_nbr < NBR_WORKERS; worker_nbr++)
+    char cmd[0];
+    sprintf(cmd, "%d", num);
+    std::string filter = std::string(cmd);
+    // std::string filter = "";
+    void *pCtx = zmq_ctx_new();
+    void *pSockSub = zmq_socket(pCtx, ZMQ_SUB);
+    zmq_setsockopt(pSockSub, ZMQ_SUBSCRIBE, filter.c_str(), filter.length());
+    // zmq_setsockopt(pSockSub, ZMQ_SUBSCRIBE, "", 0);
+    int lingerTime = 10;
+    zmq_setsockopt(pSockSub, ZMQ_LINGER, &lingerTime, sizeof(lingerTime));
+    zmq_connect(pSockSub, taddress.c_str());
+    std::size_t pose;
+    int count = 0;
+    Json::Value jsonData;
+    Json::Reader reader;
+    sleep(1);
+    while (!stopFlag)
     {
-        pthread_t worker;
-        pthread_create(&worker, NULL, worker_task, NULL);
+        char *recvChar1 = s_recv(pSockSub, ZMQ_DONTWAIT);
+        if (recvChar1 != NULL)
+        {
+            pose = std::string(recvChar1).find("_ID_End_");
+            std::cout << "pose: " << pose << std::endl;
+            if (pose == std::string::npos)
+            {
+                std::cout << "without \'_ID_End_\',recv is:\n"
+                          << recvChar1 << std::endl;
+                continue;
+            }
+
+            if (reader.parse((recvChar1 + pose + 8), jsonData))
+            {
+                std::cout << " recv_temp1:" << filter
+                          << " recv_temp2:" << std::endl
+                          << jsonData["message"].asCString() << "\n"
+                          << jsonData["data"].asInt() << "\n"
+                          << std::endl;
+            }
+            else
+                std::cout << "parse to json failed:\n"
+                          << recvChar1 + pose + 8 << std::endl;
+            free(recvChar1);
+            count++;
+            // sleep(jsonData["data"].asInt());
+        }
+        usleep(1000);
     }
-    int task_nbr;
-    std::cout << "main:start rcv!" << std::endl;
-    for (task_nbr = 0; task_nbr < NBR_WORKERS * 10; task_nbr++)
+    std::cout << "testSub" << num << "recv num:" << count << " exit done!" << std::endl;
+    zmq_close(pSockSub);
+    zmq_ctx_destroy(pCtx);
+}
+
+int main()
+{
+    std::vector<std::thread> threads;
+    signal(SIGINT, stop);
+    void *pCtx = zmq_ctx_new();
+    void *pSockPub = zmq_socket(pCtx, ZMQ_PUB);
+    int sendHwm = 10;
+    zmq_setsockopt(pSockPub, ZMQ_SNDHWM, &sendHwm, sizeof(sendHwm));
+    int lingerTime = 10;
+    zmq_setsockopt(pSockPub, ZMQ_LINGER, &lingerTime, sizeof(lingerTime));
+    zmq_bind(pSockPub, taddress.c_str());
+    for (int i = 0; i < CLIENT_NUM; i++)
     {
-        //接受一条来自req的请求
-        char *address = s_recv(client);
-        char *empty = s_recv(client);
-        free(empty);
-        char *ready = s_recv(client);
-        free(ready);
-
-        std::cout << "address:" << address << std::endl;
-        //应答
-        s_sendmore(client, address);
-        s_sendmore(client, (char *)"");
-        s_send(client, (char *)"This is the workload");
-        free(address);
+        threads.emplace_back(testSub, i);
     }
-
-    // 通知所有REQ套接字结束工作
-    for (worker_nbr = 0; worker_nbr < NBR_WORKERS; worker_nbr++)
+    char num[10];
+    char identify[10];
+    std::string str = "0123456789";
+    snprintf(identify, sizeof(identify) + 1, "%s", str.c_str());
+    std::cout << "test:" << sizeof(identify) << " | " << identify << " | " << std::string(identify) << std::endl;
+    std::string clientName;
+    std::string test;
+    std::string testmore;
+    int i = 0;
+    Json::Value jsonData;
+    jsonData["message"] = "in test clinet";
+    int count = 0;
+    while (!stopFlag)
     {
-        //接受
-        char *address = s_recv(client);
-        char *empty = s_recv(client);
-        free(empty);
-        char *ready = s_recv(client);
-        free(ready);
+        if (i >= CLIENT_NUM)
+            i = 0;
+        jsonData["data"] = i;
+        snprintf(num, sizeof(num), "%d", i);
+        clientName = std::string(num);
+        test = clientName + "_ID_End_" + jsonData.toStyledString();
+        i++;
+        if (s_send(pSockPub, const_cast<char *>(test.c_str())) < 0)
+        {
+            std::cout << "send data failed!" << std::endl;
+            continue;
+        }
 
-        //应答
-        s_sendmore(client, address);
-        s_sendmore(client, (char *)"");
-        s_send(client, (char *)"END");
-        free(address);
+        count++;
+        usleep(1000000);
     }
-    zmq_close(client);
-    zmq_term(context);
+    std::cout << "pub send num:" << count << std::endl;
+    zmq_close(pSockPub);
+    zmq_ctx_destroy(pCtx);
+    for (auto &ths : threads)
+        ths.join();
+
     return 0;
 }

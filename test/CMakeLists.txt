@@ -8,4 +8,10 @@ link_directories(${CMAKE_HOME_DIRECTORY}/depend/libzmq/linux_os_x86)
 add_executable(test1 test1.cpp)
 target_link_libraries(test1 test_src jsoncpp zmq)
 
+add_executable(testPubSub testPublisher.cpp)
+target_link_libraries(testPubSub test_src jsoncpp zmq)
+
+add_executable(testzmq testzmq.cpp)
+target_link_libraries(testzmq zmq test_src jsoncpp)
+
 

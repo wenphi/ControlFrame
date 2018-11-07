@@ -10,7 +10,7 @@
 
 bool stopFlag = false;
 moduleBase *robotStateMechine ::baseInstance = nullptr;
-std::string taddress = "ipc:///home/ywh/stateMechine.ipc";
+std::string taddress = "/home/ywh/";
 
 void stop(int sig)
 {
@@ -23,7 +23,7 @@ int main()
     std::vector<std::thread> threads;
     signal(SIGINT, stop);
     api *apitest = new api(taddress, "test");
-    for (int i = 0; i <= 10000; i++)
+    for (int i = 0; i <= 10; i++)
     {
         apitest->setHello(i);
         std::cout << "send:" << i << std::endl;

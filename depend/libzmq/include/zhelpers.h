@@ -19,12 +19,12 @@
 //  Receive 0MQ string from socket and convert into C string
 //  Caller must free returned string.
 static char *
-s_recv(void *socket)
+s_recv(void *socket, int flag_ = 0)
 {
     zmq_msg_t message;
     zmq_msg_init(&message);
     char *string = NULL;
-    if (zmq_recvmsg(socket, &message, 0) < 0)
+    if (zmq_recvmsg(socket, &message, flag_) < 0)
         // exit(1); //  Context terminated, exit
         return string;
 

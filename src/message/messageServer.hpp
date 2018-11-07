@@ -7,9 +7,12 @@
 class messageServer
 {
   public:
-    messageServer(std::string address_)
+    messageServer(std::string directory_)
     {
-        address = address_;
+        address_router = "ipc://" + directory_ + "/QxRobotRouter.ipc";
+        address_pub = "ipc://" + directory_ + "/QxRobotPubSub.ipc";
+        std::cout << "debug::Server:\naddress_router: " << address_router << std::endl
+                  << "address_pub: " << address_pub << std::endl;
         //发送--接收阻塞时间/ms
         rblockTime = 1000;
         sblockTime = 1000;
@@ -17,6 +20,7 @@ class messageServer
         context = zmq_ctx_new();
         //创建socket
         pSockRouter = zmq_socket(context, ZMQ_ROUTER);
+        pSockPub = zmq_socket(context, ZMQ_PUB);
         //设置吞吐率
         int rate = 1024 * 1024;
         zmq_setsockopt(pSockRouter, ZMQ_RATE, &rate, sizeof(rate));
@@ -26,17 +30,22 @@ class messageServer
         //设置socket退出时的阻塞时间--1000ms
         int linger_time = 10;
         zmq_setsockopt(pSockRouter, ZMQ_LINGER, &linger_time, sizeof(linger_time));
+        zmq_setsockopt(pSockPub, ZMQ_LINGER, &linger_time, sizeof(linger_time));
         //设置socket缓存的最大消息条数
         int recvHwm = 10;
+        int pubHwm = 100;
         zmq_setsockopt(pSockRouter, ZMQ_RCVHWM, &recvHwm, sizeof(recvHwm));
+        zmq_setsockopt(pSockPub, ZMQ_SNDHWM, &pubHwm, sizeof(pubHwm));
         //绑定
-        zmq_bind(pSockRouter, address.c_str());
+        zmq_bind(pSockPub, address_pub.c_str());
+        zmq_bind(pSockRouter, address_router.c_str());
         //完成
         msgReady = true;
     };
     ~messageServer()
     {
         zmq_close(pSockRouter);
+        zmq_close(pSockPub);
         zmq_ctx_destroy(context);
         std::cout << "server:"
                   << "exit done!" << std::endl;
@@ -76,6 +85,16 @@ class messageServer
         ret3 = zmq_send(pSockRouter, charData, len, 0);
         return ret3;
     };
+
+    int pubJson(std::string filter, Json::Value &jsonData)
+    {
+        int ret;
+        std::string sendData;
+        sendData = filter + "_ID_End_" + jsonData.toStyledString();
+        // std::cout << "debug:publish data:" << sendData << std::endl;
+        ret = s_send(pSockPub, const_cast<char *>(sendData.c_str()));
+        return ret;
+    }
     //接收
     Json::Value recvJson()
     {
@@ -126,11 +145,14 @@ class messageServer
 
   private:
     bool msgReady = false;
-    bool isBlock;         //每次调用recv后刷新,决定了发送类型{地址+""+数据}/{地址+数据}
-    std::string clientid; //每次调用recv后刷新,决定了下一次send的发送地址;
-    std::string address;  //zmq链接的通讯地址
-    void *context;        //zmq的环境/上下文
-    void *pSockRouter;    //zmq创建Router的sock
-    int rblockTime;       //接收阻塞时间
-    int sblockTime;       //发送阻塞时间
+    bool isBlock;               //每次调用recv后刷新,决定了发送类型{地址+""+数据}/{地址+数据}
+    std::string clientid;       //每次调用recv后刷新,决定了下一次send的发送地址;
+    std::string address;        //用于保存临时地址
+    std::string address_router; //zmq问答模式通讯地址
+    std::string address_pub;    //zmq发布模式通讯地址
+    void *context;              //zmq的环境/上下文
+    void *pSockRouter;          //zmq创建Router的sock
+    void *pSockPub;             //zmq创建发布的sock
+    int rblockTime;             //接收阻塞时间
+    int sblockTime;             //发送阻塞时间
 };

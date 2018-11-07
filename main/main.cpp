@@ -9,7 +9,7 @@
 
 bool stopFlag = false;
 moduleBase *robotStateMechine ::baseInstance = nullptr;
-std::string taddress = "ipc:///home/ywh/stateMechine.ipc";
+std::string taddress = "/home/ywh";
 
 void stop(int sig)
 {

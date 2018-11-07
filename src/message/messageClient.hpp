@@ -7,68 +7,43 @@
 class messageClient
 {
   public:
-    messageClient(std::string address_, std::string id, int blockTime = 1000)
+    messageClient(std::string directory_, std::string id, int blockTime = 1000)
     {
-        address = address_;
+        address_router = "ipc://" + directory_ + "/QxRobotRouter.ipc";
+        address_pub = "ipc://" + directory_ + "/QxRobotPubSub.ipc";
         clientid = id;
         idDealer = id + std::string(".dealer");
         idReq = id + std::string(".req");
         std::cout << "debug:client:identify: " << idDealer << "||" << idReq << std::endl;
-        std::cout << "debug::client:address: " << address << std::endl;
+        std::cout << "debug::client:address_router: " << address_router << "\n"
+                  << "address_pub:" << address_pub << std::endl;
         //创建环境
         context = zmq_ctx_new();
         //创建socket
         pSockDealer = zmq_socket(context, ZMQ_DEALER);
         pSockReq = zmq_socket(context, ZMQ_REQ);
+        pSockSub = zmq_socket(context, ZMQ_SUB);
         //设置阻塞时间
         zmq_setsockopt(pSockDealer, ZMQ_SNDTIMEO, &blockTime, sizeof(blockTime));
         zmq_setsockopt(pSockDealer, ZMQ_RCVTIMEO, &blockTime, sizeof(blockTime));
-        //设置退出时的等待时间--1000ms
-        int linger_time = 1000;
+        //设置退出时的等待时间--100ms
+        int linger_time = 100;
         zmq_setsockopt(pSockDealer, ZMQ_LINGER, &linger_time, sizeof(linger_time));
         zmq_setsockopt(pSockReq, ZMQ_LINGER, &linger_time, sizeof(linger_time));
+        zmq_setsockopt(pSockSub, ZMQ_SUB, &linger_time, sizeof(linger_time));
+        // zmq_setsockopt(psock)
         //设置socket缓存的最大消息条数
         int sendHwm = 10;
-        int recvHwm=10;
+        int recvHwm = 10;
         zmq_setsockopt(pSockDealer, ZMQ_SNDHWM, &sendHwm, sizeof(sendHwm));
         zmq_setsockopt(pSockDealer, ZMQ_RCVHWM, &recvHwm, sizeof(recvHwm));
         //设置id
         zmq_setsockopt(pSockDealer, ZMQ_IDENTITY, idDealer.c_str(), idDealer.size());
         zmq_setsockopt(pSockReq, ZMQ_IDENTITY, idReq.c_str(), idReq.size());
         //连接
-        zmq_connect(pSockDealer, address.c_str());
-        zmq_connect(pSockReq, address.c_str());
-        //完成
-        msgReady = true;
-    };
-    messageClient(std::string address_)
-    {
-        char identity[10];
-        snprintf(identity, sizeof(identity), "%04X-%04X", within(0x10000), within(0x10000));
-        clientid = std::string(identity);
-        idDealer = std::string(identity) + std::string(".dealer");
-        idReq = std::string(identity) + std::string(".req");
-        std::cout << "debug:client:address:" << idDealer << "||" << idReq << std::endl;
-        address = address_;
-        //创建环境
-        context = zmq_ctx_new();
-        //创建socket
-        pSockDealer = zmq_socket(context, ZMQ_DEALER);
-        pSockReq = zmq_socket(context, ZMQ_REQ);
-        //设置阻塞时间
-        int blockTime = 1000;
-        zmq_setsockopt(pSockDealer, ZMQ_SNDTIMEO, &blockTime, sizeof(blockTime));
-        zmq_setsockopt(pSockDealer, ZMQ_RCVTIMEO, &blockTime, sizeof(blockTime));
-        //配置id
-        zmq_setsockopt(pSockDealer, ZMQ_IDENTITY, &idDealer, sizeof(idDealer));
-        zmq_setsockopt(pSockReq, ZMQ_IDENTITY, &idReq, sizeof(idReq));
-        //设置socket退出时的阻塞时间--1000ms
-        int linger_time = 0;
-        zmq_setsockopt(pSockDealer, ZMQ_LINGER, &linger_time, sizeof(linger_time));
-        zmq_setsockopt(pSockReq, ZMQ_LINGER, &linger_time, sizeof(linger_time));
-        //连接
-        zmq_connect(pSockDealer, address.c_str());
-        zmq_connect(pSockReq, address.c_str());
+        zmq_connect(pSockDealer, address_router.c_str());
+        zmq_connect(pSockReq, address_router.c_str());
+        zmq_connect(pSockSub, address_pub.c_str());
         //完成
         msgReady = true;
     };
@@ -76,11 +51,19 @@ class messageClient
     {
         zmq_close(pSockDealer);
         zmq_close(pSockReq);
+        zmq_close(pSockSub);
         zmq_ctx_destroy(context);
-        // std::cout << "client:" << clientid << " exit done!" << std::endl;
+        std::cout << "client:" << clientid << " exit done!" << std::endl;
     };
     //初始化
-
+    int setFilter(std::string filter_)
+    {
+        return zmq_setsockopt(pSockSub, ZMQ_SUBSCRIBE, filter_.c_str(), filter_.length());
+    }
+    int removeFilter(std::string filter_)
+    {
+        return zmq_setsockopt(pSockSub, ZMQ_UNSUBSCRIBE, filter_.c_str(), filter_.length());
+    }
     //发送json格式的消息
     int sendJson(Json::Value &jsonData)
     {
@@ -135,6 +118,28 @@ class messageClient
     {
         return s_recv(pSockReq);
     }
+    //接收订阅消息
+    Json::Value subJson()
+    {
+        Json::Reader reader;
+        Json::Value jsonData;
+        int data_pose;
+        if (!msgReady)
+            return jsonData;
+        char *charData = s_recv(pSockSub, ZMQ_DONTWAIT);
+        if (charData == NULL)
+            return jsonData;
+        // std::cout << "debug:sub data:" << charData << std::endl;
+        data_pose = std::string(charData).find("_ID_End_");
+        if (data_pose == std::string::npos)
+        {
+            std::cout << "recv data with out \'_ID_End_\'" << std::endl;
+            return jsonData;
+        }
+        reader.parse((charData + data_pose + 8), jsonData);
+        free(charData);
+        return jsonData;
+    }
 
   private:
     bool msgReady = false;
@@ -142,10 +147,12 @@ class messageClient
     std::string clientid;
     std::string idDealer; //zmq的sock标识
     std::string idReq;
-    std::string address; //zmq链接的通讯地址
+    std::string address_pub;    //zmq链接的通讯地址
+    std::string address_router; //zmq应答模式的通讯地址
 
     void *context;     //zmq的环境/上下文
     void *pSockDealer; //zmq创建Dealer的sock
     void *pSockReq;    //zmq创建Req的sock
+    void *pSockSub;    //zmq创建sub的sock
     int blockTime;     //阻塞时间
 };
