@@ -4,7 +4,7 @@ void api::setHello(int num)
 {
 
     Json::Value jsonData;
-    jsonData["msgType"] = msgtype_t::MSG_CMD;
+    jsonData["msgType"] = msgtype_t::MSG_TYPE_CMD;
     jsonData["module"] = msgModule_t::MSG_MODULE_HELLO;
     jsonData["needReply"] = true;
     jsonData["msgData"]["cmd"] = 0;
@@ -17,12 +17,12 @@ int api::readHello()
 {
     std::lock_guard<std::mutex> lock(api_block_mutex);
     Json::Value jsonData;
-    jsonData["msgType"] = msgtype_t::MSG_CMD;
+    jsonData["msgType"] = msgtype_t::MSG_TYPE_CMD;
     jsonData["module"] = msgModule_t::MSG_MODULE_HELLO;
     jsonData["needReply"] = true;
     jsonData["msgData"]["cmd"] = 1;
     msgClient->sendJson_block(jsonData);
     jsonData = msgClient->recvJson_block();
-    int num = jsonData["replyMessage"]["reply"]["param1"].asInt();
+    int num = jsonData["replyMessage"]["param1"].asInt();
     return num;
 }

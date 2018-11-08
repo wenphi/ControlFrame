@@ -69,9 +69,9 @@
 {
     "replyMessage":
     {
-        "result":,
-        "reply":,
-        "state":
+        "param1":"xx",
+        "param2":"xx",
+        "..."
     }
 }
 ```
@@ -92,4 +92,32 @@ motion
     - 钩子函数(调用放回插补的关节值)
     - (待定:提前计算/)
 
+- 模块返回消息格式示例
+```json
+{
+    "stateMsg":
+    {
+        "state":"xx",
+        "value":"xx",
+        "..."
+    },
+    "resultMsg":
+    {
+        "param1":"xx",
+        "param2":"xx",
+        "..."
+    }
+}
+
+- 执行后返回消息格式示例
+{
+    "needReply":"xx",
+    "replyMessage":
+    {
+        "param1":"xx",
+        "param2":"xx",
+        "..."
+    }
+}
+```
 

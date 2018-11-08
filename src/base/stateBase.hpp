@@ -4,14 +4,16 @@
 
 enum msgModule_t
 {
+    MSG_MODULE_UNDEFINE = 0,
     MSG_MODULE_API,
     MSG_MODULE_MOTION,
     MSG_MODULE_IO,
     MSG_MODULE_HELLO,
 };
 
-enum motionCmd_t
+enum msgCmd_t
 {
+    MSG_CMD_UNDEFINE,
     MSG_CMD_MOTION_ADD_LINE,
     MSG_CMD_MOTION_QUERY_TEMPERATURE,
 };
@@ -19,15 +21,17 @@ enum motionCmd_t
 class robotStateMechine;
 enum msgState_t
 {
-    MSG_NONE,
-    MSG_EMERGENCY,
-    MSG_HOMED,
+    MSG_STATE_NONE,
+    MSG_STATE_EMERGENCY,
+    MSG_STATE_HOMED,
 };
 
 enum msgtype_t
 {
-    MSG_CMD,
-    MSG_STATE
+    MSG_TYPE_UNDEFINE,
+    MSG_TYPE_CMD,
+    MSG_TYPE_STATE,
+    MSG_TYPE_PUB,
 };
 struct stateHolder_t
 {

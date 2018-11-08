@@ -20,11 +20,106 @@ bool robotStateMechine::registerHello(hello *hello_)
     return true;
 }
 
-//
 moduleBase *robotStateMechine::getModuleBasePtr()
 {
     return baseInstance;
 }
+
+/*----------------------------------消息机钩子-----------------------------------*/
+void robotStateMechine::updateHook()
+{
+    if (!stopFlag)
+    {
+        recvJson = zmqServer->recvJson();
+        if (!recvJson.isNull())
+        {
+            replyJson = stateProcessing(recvJson);
+            if (replyJson["needReply"].asBool())
+            {
+                if (zmqServer->sendJson(replyJson) < 0)
+                    std::cout << "robot state mechine reply message failed!" << std::endl;
+            }
+        }
+    }
+}
+
+Json::Value robotStateMechine::stateProcessing(const Json::Value jsonData)
+{
+    std::lock_guard<std::mutex> lock(mutex_msg_processing);
+    clearHolder();
+    if (parseMessage(jsonData))
+    {
+        switch (msgHolder.msgType)
+        {
+        case msgtype_t::MSG_TYPE_STATE:
+            updateStateHolder(msgHolder.msgData);
+            break;
+        case msgtype_t::MSG_TYPE_CMD:
+            preStateBase->filterHook(msgHolder);
+            if (msgHolder.msgIsValid)
+            {
+                baseInstance = praseCmdToModule();
+                if (baseInstance != nullptr)
+                {
+                    (*baseInstance)();
+                    replyHolder.moduleReply = baseInstance->outPutReply();
+                    updateStateHolder(replyHolder.moduleReply["stateMsg"]);
+                }
+            }
+            break;
+        case msgtype_t::MSG_TYPE_PUB:
+            break;
+        default:
+            std::cout << "robotStateMechine: Unknow message type! " << std::endl;
+        }
+    }
+    preStateBase->updateHook(this);
+    nextStateBase = preStateBase->updateState(stateHolder);
+    if (nextStateBase != nullptr)
+    {
+        delete preStateBase;
+        preStateBase = nextStateBase;
+    }
+    return getReplyJson();
+}
+
+bool robotStateMechine::parseMessage(const Json::Value jsonData)
+{
+    if (jsonData.isNull())
+        return false;
+    //消息类型
+    if (jsonData["msgType"].isNull())
+        return false;
+    msgHolder.msgType = jsonData["msgType"].asInt();
+    switch (msgHolder.msgType)
+    {
+    case msgtype_t::MSG_TYPE_CMD:
+        //执行模块
+        if (jsonData["module"].isNull())
+            return false;
+        msgHolder.modules = jsonData["module"].asInt();
+        //指令参数
+        if (jsonData["msgData"].isNull())
+            return false;
+        msgHolder.msgData = jsonData["msgData"];
+        break;
+    case msgtype_t::MSG_TYPE_STATE:
+        break;
+    case msgtype_t::MSG_TYPE_PUB:
+        break;
+    default:
+        return false;
+    }
+    //解析发布消息
+    if (jsonData["needReply"].isNull())
+        msgHolder.needReply = false;
+    else
+        msgHolder.needReply = jsonData["needReply"].asBool();
+    //重置标志位
+    msgHolder.msgIsValid = false;
+    return true;
+}
+
 moduleBase *robotStateMechine::praseCmdToModule()
 {
     //根据参数进行选取子类
@@ -32,85 +127,44 @@ moduleBase *robotStateMechine::praseCmdToModule()
     switch (msgHolder.modules)
     {
     case msgModule_t::MSG_MODULE_HELLO:
+        if (ptrhello == NULL)
+        {
+            baseInstance = NULL;
+            std::cout << "robotStateMechine: The hello module unregistered!" << std::endl;
+            break;
+        }
         baseInstance = ptrhello;
         break;
     default:
-        baseInstance = nullptr;
+        baseInstance = NULL;
+        std::cout << "robotStateMechine: Unknow module!" << std::endl;
     }
-    if (baseInstance != nullptr)
+    if (baseInstance != NULL)
         baseInstance->setMessage(msgHolder.msgData);
     return baseInstance;
 }
-
-void robotStateMechine::updateHook()
-{
-    if (!stopFlag)
-    {
-        if (recvMessage())
-        {
-            if (msgHolder.msgType == msgtype_t::MSG_STATE)
-                updateStateHolder(msgHolder.msgData);
-            else
-            {
-                preStateBase->filterHook(msgHolder);
-                if (msgHolder.msgIsValid)
-                {
-                    baseInstance = praseCmdToModule();
-                    if (baseInstance != nullptr)
-                    {
-                        (*baseInstance)();
-                        replyHolder.moduleReply = baseInstance->outPutReply();
-                        updateStateHolder(replyHolder.moduleReply);
-                    }
-                }
-            }
-            if (msgHolder.needReply)
-                replyMessage();
-        }
-        preStateBase->updateHook(this);
-        nextStateBase = preStateBase->updateState(stateHolder);
-        if (nextStateBase != nullptr)
-        {
-            delete preStateBase;
-            preStateBase = nextStateBase;
-        }
-    }
-}
-
-bool robotStateMechine::replyMessage()
+Json::Value robotStateMechine::getReplyJson()
 {
     Json::Value msgReply_JSON;
-    msgReply_JSON["replyMessage"] = replyHolder.moduleReply;
-    if (zmqServer->sendJson(msgReply_JSON) < 0)
-        std::cout << "reply message failed!" << std::endl;
-    return true;
+    msgReply_JSON["needReply"] = msgHolder.needReply;
+    if (replyHolder.moduleReply.isNull())
+        msgReply_JSON["replyMessage"] = replyHolder.stateMechineReply;
+    else
+        msgReply_JSON["replyMessage"] = replyHolder.moduleReply["resultMsg"];
+
+    return msgReply_JSON;
 }
 
-//test
-//获取消息
-bool robotStateMechine::recvMessage()
+void robotStateMechine::clearHolder()
 {
-    Json::Value data = zmqServer->recvJson();
-
-    if (data.isNull())
-    {
-        msgHolder.msgIsNull = true;
-        return false;
-    }
-    if (data["msgType"].isNull())
-        return false;
-    msgHolder.msgType = data["msgType"].asInt();
-    if (data["module"].isNull())
-        return false;
-    msgHolder.modules = data["module"].asInt();
-    if (data["msgData"].isNull())
-        return false;
-    msgHolder.msgData = data["msgData"];
-    if (data["needReply"].isNull())
-        return false;
-    msgHolder.needReply = data["needReply"].asBool();
+    Json::Value clearJson;
+    msgHolder.modules = msgModule_t::MSG_MODULE_UNDEFINE;
+    msgHolder.msgData = clearJson;
+    msgHolder.msgIsNull = true;
     msgHolder.msgIsValid = false;
-    msgHolder.msgIsNull = false;
-    // std::cout << "stateMechine:debug:" << data.toStyledString() << std::endl;
-    return true;
+    msgHolder.needReply = false;
+    msgHolder.msgType = msgtype_t::MSG_TYPE_UNDEFINE;
+
+    replyHolder.moduleReply = clearJson;
+    replyHolder.stateMechineReply = clearJson;
 }

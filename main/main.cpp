@@ -17,6 +17,23 @@ void stop(int sig)
         stopFlag = true;
 }
 
+void hook(robotStateMechine *rsm)
+{
+    while (!stopFlag)
+    {
+        Json::Value jsonData;
+        jsonData["msgType"] = msgtype_t::MSG_TYPE_CMD;
+        jsonData["module"] = msgModule_t::MSG_MODULE_HELLO;
+        jsonData["needReply"] = true;
+        jsonData["msgData"]["cmd"] = 1;
+        jsonData = rsm->stateProcessing(jsonData);
+        int num = jsonData["replyMessage"]["param1"].asInt();
+        std::cout << "in hook num:" << num << std::endl;
+        sleep(1);
+    }
+    std::cout << "hook exit done!" << std::endl;
+}
+
 int main()
 {
     std::vector<std::thread> threads;
@@ -30,6 +47,8 @@ int main()
     rsm->registerMessageServer(msgServer);
     rsm->registerHello(ptrHello);
     rsm->setStart();
+    //开启线程
+    threads.emplace_back(hook, rsm);
     while (!stopFlag)
         rsm->updateHook();
 
