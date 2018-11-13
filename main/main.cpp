@@ -48,7 +48,7 @@ int main()
     rsm->registerHello(ptrHello);
     rsm->setStart();
     //开启线程
-    threads.emplace_back(hook, rsm);
+    // threads.emplace_back(hook, rsm);
     while (!stopFlag)
         rsm->updateHook();
 

@@ -13,9 +13,9 @@ enum msgModule_t
 
 enum msgCmd_t
 {
-    MSG_CMD_UNDEFINE,
-    MSG_CMD_MOTION_ADD_LINE,
-    MSG_CMD_MOTION_QUERY_TEMPERATURE,
+    MSG_CMD_UNDEFINE = 0,
+    MSG_CMD_HELLO_UNDEFINE = 100,
+    MSG_CMD_MOTION_UNDEFINE = 200,
 };
 
 class robotStateMechine;
